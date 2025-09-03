@@ -1,0 +1,33 @@
+{
+  "data": [
+    {
+      "id": "cmf4d2tgbynm1uo6y5573ceho",
+      "factionSymbol": "COSMIC",
+      "type": "PROCUREMENT",
+      "terms": {
+        "deadline": "2025-09-10T19:19:36.345Z",
+        "payment": {
+          "onAccepted": 1948,
+          "onFulfilled": 13044
+        },
+        "deliver": [
+          {
+            "tradeSymbol": "IRON_ORE",
+            "destinationSymbol": "X1-MZ70-H55",
+            "unitsRequired": 70,
+            "unitsFulfilled": 0
+          }
+        ]
+      },
+      "accepted": true,
+      "fulfilled": false,
+      "expiration": "2025-09-04T19:19:36.345Z",
+      "deadlineToAccept": "2025-09-04T19:19:36.345Z"
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 10
+  }
+}
