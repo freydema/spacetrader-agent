@@ -18,6 +18,9 @@ from models.state_enums import AgentState
 from utils.logging import setup_logging
 from states.base_state import BaseState
 from states.assess_situation import AssessSituationState
+from states.negotiate_contract import NegotiateContractState
+from states.accept_contract import AcceptContractState
+from states.acquire_resources import AcquireResourcesState
 
 
 class SpaceTradersAgent:
@@ -383,6 +386,9 @@ class SpaceTradersAgent:
     def _register_states(self) -> None:
         """Register implemented state classes."""
         self.state_registry[AgentState.ASSESS_SITUATION] = AssessSituationState(self.context)
+        self.state_registry[AgentState.NEGOTIATE_CONTRACT] = NegotiateContractState(self.context)
+        self.state_registry[AgentState.ACCEPT_CONTRACT] = AcceptContractState(self.context)
+        self.state_registry[AgentState.ACQUIRE_RESOURCES] = AcquireResourcesState(self.context)
     
     def register_state(self, state_enum: AgentState, state_class: BaseState) -> None:
         """Register a state implementation."""

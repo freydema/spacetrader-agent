@@ -185,6 +185,11 @@ class SpaceTradersAPIClient:
         data = {"symbol": trade_symbol, "units": units}
         return self._make_request("POST", f"/v2/my/ships/{ship_symbol}/sell", json=data)
     
+    def purchase_ship(self, ship_type: str, waypoint_symbol: str) -> Dict[str, Any]:
+        """Purchase a ship at a shipyard."""
+        data = {"shipType": ship_type, "waypointSymbol": waypoint_symbol}
+        return self._make_request("POST", "/v2/my/ships", json=data)
+    
     # System and waypoint endpoints
     
     def get_system(self, system_symbol: str) -> Dict[str, Any]:
