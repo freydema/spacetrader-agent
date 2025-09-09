@@ -7,25 +7,17 @@ The agent continuously negotiates and fulfills contracts to maximize profit.
 
 import os
 import time
-import logging
-from enum import Enum
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 
-
-class AgentState(Enum):
-    """Enumeration of all possible agent states."""
-    INITIALIZE = "initialize"
-    ASSESS_SITUATION = "assess_situation"
-    NEGOTIATE_CONTRACT = "negotiate_contract"
-    ACCEPT_CONTRACT = "accept_contract"
-    PLAN_FULFILLMENT = "plan_fulfillment"
-    ACQUIRE_RESOURCES = "acquire_resources"
-    EXECUTE_CONTRACT = "execute_contract"
-    DELIVER_GOODS = "deliver_goods"
-    COMPLETE_CONTRACT = "complete_contract"
-    EVALUATE_PERFORMANCE = "evaluate_performance"
-    ERROR_RECOVERY = "error_recovery"
+from api.client import SpaceTradersAPIClient
+from models.agent_data import AgentContext, AgentData, PerformanceMetrics
+from models.contract import Contract
+from models.ship import Ship
+from models.state_enums import AgentState
+from utils.logging import setup_logging
+from states.base_state import BaseState
+from states.assess_situation import AssessSituationState
 
 
 class SpaceTradersAgent:
@@ -38,30 +30,31 @@ class SpaceTradersAgent:
     
     def __init__(self):
         """Initialize the agent with configuration and logging."""
-        self.setup_logging()
         self.load_configuration()
+        self.logger = setup_logging()
+        
+        # Initialize API client
+        self.api_client = SpaceTradersAPIClient(
+            base_url=self.api_base_url,
+            agent_token=self.agent_token
+        )
+        
+        # Initialize shared context
+        self.context = AgentContext(
+            api_client=self.api_client,
+            logger=self.logger
+        )
+        
+        # State management
         self.current_state = AgentState.INITIALIZE
-        self.agent_data = {}
-        self.current_contract = None
-        self.ships = []
-        self.performance_metrics = {
-            'contracts_completed': 0,
-            'total_credits_earned': 0,
-            'total_execution_time': 0,
-            'errors_encountered': 0
-        }
         self.running = True
+        
+        # State registry - will be populated as we implement states
+        self.state_registry = {}
+        self._register_states()
         
         self.logger.info("SpaceTraders Agent initialized")
     
-    def setup_logging(self) -> None:
-        """Configure logging for the agent."""
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        self.logger = logging.getLogger(__name__)
     
     def load_configuration(self) -> None:
         """Load configuration from environment variables."""
@@ -73,8 +66,6 @@ class SpaceTradersAgent:
         
         if not self.agent_token and not self.account_token:
             raise ValueError("Either AGENT_TOKEN or ACCOUNT_TOKEN must be provided in .env file")
-        
-        self.logger.info("Configuration loaded successfully")
     
     def run(self) -> None:
         """
@@ -105,14 +96,14 @@ class SpaceTradersAgent:
                     break
                 except Exception as e:
                     self.logger.error(f"Unexpected error in main loop: {e}")
-                    self.performance_metrics['errors_encountered'] += 1
+                    self.context.performance_metrics.errors_encountered += 1
                     self.current_state = AgentState.ERROR_RECOVERY
                     
         finally:
             execution_time = time.time() - start_time
-            self.performance_metrics['total_execution_time'] = execution_time
+            self.context.performance_metrics.total_execution_time = execution_time
             self.logger.info(f"Agent stopped after {execution_time:.2f} seconds")
-            self.log_performance_summary()
+            self.context.log_performance_summary()
     
     def execute_current_state(self) -> Optional[AgentState]:
         """
@@ -121,26 +112,34 @@ class SpaceTradersAgent:
         Returns:
             Optional[AgentState]: Next state to transition to, or None to stay in current state
         """
-        state_handlers = {
-            AgentState.INITIALIZE: self.state_initialize,
-            AgentState.ASSESS_SITUATION: self.state_assess_situation,
-            AgentState.NEGOTIATE_CONTRACT: self.state_negotiate_contract,
-            AgentState.ACCEPT_CONTRACT: self.state_accept_contract,
-            AgentState.PLAN_FULFILLMENT: self.state_plan_fulfillment,
-            AgentState.ACQUIRE_RESOURCES: self.state_acquire_resources,
-            AgentState.EXECUTE_CONTRACT: self.state_execute_contract,
-            AgentState.DELIVER_GOODS: self.state_deliver_goods,
-            AgentState.COMPLETE_CONTRACT: self.state_complete_contract,
-            AgentState.EVALUATE_PERFORMANCE: self.state_evaluate_performance,
-            AgentState.ERROR_RECOVERY: self.state_error_recovery,
-        }
+        # Get state handler from registry or fallback to legacy methods
+        state_handler = self.state_registry.get(self.current_state)
         
-        handler = state_handlers.get(self.current_state)
-        if handler:
-            return handler()
+        if state_handler:
+            # Use new state pattern
+            return state_handler.execute()
         else:
-            self.logger.error(f"No handler found for state: {self.current_state}")
-            return AgentState.ERROR_RECOVERY
+            # Fallback to legacy state methods for not-yet-migrated states
+            legacy_handlers = {
+                AgentState.INITIALIZE: self.state_initialize,
+                AgentState.ASSESS_SITUATION: self.state_assess_situation,
+                AgentState.NEGOTIATE_CONTRACT: self.state_negotiate_contract,
+                AgentState.ACCEPT_CONTRACT: self.state_accept_contract,
+                AgentState.PLAN_FULFILLMENT: self.state_plan_fulfillment,
+                AgentState.ACQUIRE_RESOURCES: self.state_acquire_resources,
+                AgentState.EXECUTE_CONTRACT: self.state_execute_contract,
+                AgentState.DELIVER_GOODS: self.state_deliver_goods,
+                AgentState.COMPLETE_CONTRACT: self.state_complete_contract,
+                AgentState.EVALUATE_PERFORMANCE: self.state_evaluate_performance,
+                AgentState.ERROR_RECOVERY: self.state_error_recovery,
+            }
+            
+            handler = legacy_handlers.get(self.current_state)
+            if handler:
+                return handler()
+            else:
+                self.logger.error(f"No handler found for state: {self.current_state}")
+                return AgentState.ERROR_RECOVERY
     
     # State handler methods - these will be implemented in future steps
     
@@ -334,7 +333,7 @@ class SpaceTradersAgent:
         # TODO: Record contract completion metrics
         # TODO: Update agent status with new credits
         
-        self.performance_metrics['contracts_completed'] += 1
+        self.context.performance_metrics.contracts_completed += 1
         return AgentState.EVALUATE_PERFORMANCE
     
     def state_evaluate_performance(self) -> AgentState:
@@ -381,17 +380,13 @@ class SpaceTradersAgent:
         self.logger.info("Initiating graceful shutdown...")
         self.running = False
     
-    def log_performance_summary(self) -> None:
-        """Log a summary of agent performance metrics."""
-        self.logger.info("=== PERFORMANCE SUMMARY ===")
-        self.logger.info(f"Contracts completed: {self.performance_metrics['contracts_completed']}")
-        self.logger.info(f"Total credits earned: {self.performance_metrics['total_credits_earned']}")
-        self.logger.info(f"Total execution time: {self.performance_metrics['total_execution_time']:.2f}s")
-        self.logger.info(f"Errors encountered: {self.performance_metrics['errors_encountered']}")
-        
-        if self.performance_metrics['total_execution_time'] > 0:
-            efficiency = self.performance_metrics['contracts_completed'] / (self.performance_metrics['total_execution_time'] / 3600)
-            self.logger.info(f"Contracts per hour: {efficiency:.2f}")
+    def _register_states(self) -> None:
+        """Register implemented state classes."""
+        self.state_registry[AgentState.ASSESS_SITUATION] = AssessSituationState(self.context)
+    
+    def register_state(self, state_enum: AgentState, state_class: BaseState) -> None:
+        """Register a state implementation."""
+        self.state_registry[state_enum] = state_class
 
 
 def main():
