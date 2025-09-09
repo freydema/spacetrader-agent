@@ -4,7 +4,7 @@ Data models for contracts.
 
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -68,13 +68,14 @@ class ContractTerms:
     @property
     def is_expired(self) -> bool:
         """Check if contract is expired."""
-        return datetime.now() > self.deadline
+        now = datetime.now(timezone.utc)
+        return now > self.deadline
     
     @classmethod
     def from_api_response(cls, data: Dict[str, Any]) -> 'ContractTerms':
         """Create ContractTerms from API response."""
         deadline_str = data.get('deadline', '')
-        deadline = datetime.fromisoformat(deadline_str.replace('Z', '+00:00')) if deadline_str else datetime.now()
+        deadline = datetime.fromisoformat(deadline_str.replace('Z', '+00:00')) if deadline_str else datetime.now(timezone.utc)
         
         deliveries = [
             ContractDelivery.from_api_response(delivery)
@@ -115,8 +116,9 @@ class Contract:
     @property
     def is_expired(self) -> bool:
         """Check if contract is expired."""
+        now = datetime.now(timezone.utc)
         if self.expiration:
-            return datetime.now() > self.expiration
+            return now > self.expiration
         return self.terms.is_expired
     
     @property
@@ -153,7 +155,8 @@ class Contract:
         profit_margin = profit / max(1, self.terms.total_payment)
         
         # Time factor - prefer contracts with more time remaining
-        time_remaining = (self.terms.deadline - datetime.now()).total_seconds()
+        now = datetime.now(timezone.utc)
+        time_remaining = (self.terms.deadline - now).total_seconds()
         time_factor = min(1.0, time_remaining / 86400)  # Normalize to 1 day
         
         score = profit_per_unit * profit_margin * time_factor * 100
